@@ -1,0 +1,152 @@
+---
+title: "Late-Round WR Study"
+author: "Eddy Gekosky"
+date: "9/28/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+install.packages('tidyverse')
+library(tidyverse)
+```
+
+# Abstract:
+
+### The following study was conducted to analyze how different subsets of late-round wide receivers perform over the course of a season in fantasy football. The study specifically looks at how WRs perform in a PPR (points per reception) format and used data on the wide receivers' end of season point totals.  Late-round wide receivers were defined as any wide receiver that had an ADP higher than 89 and lower than 181.  All ADP data was pulled from the Fantasy Football Calculator website and only data from the 2017-2018 season to the 2020-2021 season was used.
+
+# Analyzing different subsets of wide receivers:
+
+The code below creates a tibble that will store the hit rates for each of the subsets of late-round wide receivers that are being analyzed.
+```{r}
+hit_rates <- tibble(Subset = character(), Top.30.avg = numeric(), Top.12.avg = numeric(), X5.Startable.Weeks.avg = numeric(), Players.In.Subset = numeric())
+```
+
+
+The code below finds the rate at which the late-round receivers from the 2017 season to the 2020 season met 3 criteria.  The three criteria were finishing Top 30 at their position for that season, finishing Top 12 at their position for that season, and being startable for at least 5 weeks that season.  A "startable week" is defined as a week in which the receiver scored at least 10 points.
+```{r}
+hit_rates <- add_row(hit_rates, Subset = 'All WRs', Top.30.avg = mean(Analyzing_Breakout_WRs$Top.30.), Top.12.avg = mean(Analyzing_Breakout_WRs$Top.12.), X5.Startable.Weeks.avg = mean(Analyzing_Breakout_WRs$X5..Startable.Weeks.), Players.In.Subset = nrow(Analyzing_Breakout_WRs))
+```
+
+
+The code below looks at the rate that sophomore WRs drafted in the late rounds met the 3 criteria outlined above.
+```{r}
+Soph_WR_data <- Analyzing_Breakout_WRs%>%
+  filter(Sophomore.==1)
+
+hit_rates <- add_row(hit_rates, Subset = 'Soph. WRs', Top.30.avg = mean(Soph_WR_data$Top.30.), Top.12.avg = mean(Soph_WR_data$Top.12.), X5.Startable.Weeks.avg = mean(Soph_WR_data$X5..Startable.Weeks.), Players.In.Subset = nrow(Soph_WR_data))
+```
+
+
+The code below looks at the rate that rookie WRs drafted in the late rounds met the 3 criteria outlined above.
+```{r}
+Rook_WR_Data <- Analyzing_Breakout_WRs%>%
+  filter(Rookie.==1)
+
+hit_rates <- add_row(hit_rates, Subset = 'Rookie WRs', Top.30.avg = mean(Rook_WR_Data$Top.30.), Top.12.avg = mean(Rook_WR_Data$Top.12.), X5.Startable.Weeks.avg = mean(Rook_WR_Data$X5..Startable.Weeks.), Players.In.Subset = nrow(Rook_WR_Data))
+```
+
+
+The code below looks at the rate that mid-round WRs who were late-round WRs for a consecutive year met the 3 criteria outlined above.
+```{r}
+Repeats_WR_Data <- Analyzing_Breakout_WRs%>%
+  filter(Sleeper.Before.==1)
+
+hit_rates <- add_row(hit_rates, Subset = 'Repeat WRs', Top.30.avg = mean(Repeats_WR_Data$Top.30.), Top.12.avg = mean(Repeats_WR_Data$Top.12.), X5.Startable.Weeks.avg = mean(Repeats_WR_Data$X5..Startable.Weeks.), Players.In.Subset = nrow(Repeats_WR_Data))
+```
+
+
+The code below looks at the rate that late-round WRs who didn't fit into any of the subsets (Rookies, Sophomores, and Repeat Mid-Round WRs) for a consecutive year met the 3 criteria outlined above.
+```{r}
+NoCategories_WR_Data <- Analyzing_Breakout_WRs%>%
+  filter(Sophomore.==0, Rookie.==0, Sleeper.Before.==0)
+
+hit_rates <- add_row(hit_rates, Subset = 'Oddball WRs', Top.30.avg = mean(NoCategories_WR_Data$Top.30.), Top.12.avg = mean(NoCategories_WR_Data$Top.12.), X5.Startable.Weeks.avg = mean(NoCategories_WR_Data$X5..Startable.Weeks.), Players.In.Subset = nrow(NoCategories_WR_Data))
+```
+
+
+The code below takes the data in the "hit_rates" tibble and analyzes the rate in which they finish as top 30 WRs in total points for the year.
+```{r}
+grph_subsets_Top30 <- ggplot(hit_rates, aes(x = reorder(Subset, Top.30.avg, desc), y = Top.30.avg)) +
+  geom_col(color = 'white', fill = 'limegreen')+
+  theme(axis.text.x = element_text(size = 7))+
+  labs(title = "Rates Late-Round Receivers Finish Top 30")+
+  labs(x = 'Late-Round WR Subsets')+
+  labs(y = 'Rate Finishing Top 30')
+
+grph_subsets_Top30
+```
+#### The data suggests that late-round sophomore wide receivers followed by repeat late-round wide receivers finish as top 30 wide receivers at the highest rates out of the subsets analyzed.  Rookie late-round wide receivers finish as top 30 wide receivers around the average rate of late-round wide receivers. Oddball wide receivers finished the lowest out of all the subsets of wide receivers.
+
+
+```{r}
+grph_subsets_Top12 <- ggplot(hit_rates, aes(x = reorder(Subset, Top.12.avg, desc), y = Top.12.avg)) +
+  geom_col(color = 'white', fill = 'royalblue')+
+  theme(axis.text.x = element_text(size = 7))+
+  labs(title = "Rates Late-Round Receivers Finish Top 12")+
+  labs(x = 'Late-Round WR Subsets')+
+  labs(y = 'Rate Finishing Top 12')
+
+grph_subsets_Top12
+```
+#### This data suggests that wide receivers in the Oddball WRs and Rookie WRs subsets are more likely to finish as top 12 wide receivers with hit rates around 6%. There were no wide receivers in the Repeat WRs or the Sophomore WRs subsets that finished in the top 12 in the timeframe analyzed.
+
+
+
+
+# Analyzing the relationship between ADP and total fantasy points for late-round wide receivers:
+
+The following code takes the Analyzing_Breakout_WRs dataframe and creates a scatter plot that plots ADP vs. a wide receiver's end of season total fantasy points scored.
+```{r}
+grph_adp_totpoints <- ggplot(Analyzing_Breakout_WRs, aes(x=ADP, y=Total.Points))+
+  geom_point(color='skyblue', fill='gold', alpha=.6)+
+  geom_smooth(method = lm, color = 'black', fill = 'white', alpha = .2)
+
+grph_adp_totpoints
+```
+
+The scatter plot suggests that ADP and Total Points are negatively correlated.  This means that the late-round wide receivers drafted earlier tend to score more points than the wide receivers drafted later. The negative correlation isn't necessarily useful given that the only wide receivers that will be making an impact on a team would be roughly top 30 at the position on the season.
+
+
+
+The following code creates the same scatter plot created previously after filtering out the late-round wide receivers that did not finish in the top 30 at their position.
+
+```{r}
+Analyzing_BO_Top30_WRs <- Analyzing_Breakout_WRs %>%
+  filter(Top.30. == 1)
+
+
+
+grph_adp_totpoints_Top30 <-
+  ggplot(Analyzing_BO_Top30_WRs, aes(x=ADP, y=Total.Points))+
+  geom_point(color='purple', fill='gold', alpha=.4)+
+  geom_smooth(method = lm, color = 'black', fill = 'white', alpha = .2)+
+  ylim(0,280)
+
+grph_adp_totpoints_Top30
+```
+This scatter plot suggests that ADP and Total Points are negatively correlated.
+
+
+
+
+# Discussion:
+
+The negative correlation isn't necessarily useful given that the only wide receivers that will be making an impact on a team would be roughly top 30 at the position on the season.
+
+
+
+This new scatter plot suggests that late-round WRs drafted earlier are much more likely to score more when they breakout than the WRs drafted later.  The negative correlation between ADP and Total Points (ppr) is about as strong as the scatter plot that included all of the late-round WRs. This is much more useful as the scatter plot suggests that the notion that "Fantasy football players should get 'their guys' and ignore ADP in the late rounds" is unfounded when it comes to late-round WRs. Late-round WRs who are making a difference in fantasy, which is taken into account by only including late-round WRs that finish roughly Top 30 at the position, tend to score more points the earlier they were drafted in the late rounds. 
+
+One of the major limitations to this scatter plot is that their aren't many data points that are included in the scatter plot. This is because there has only been an average of 5 late-round WRs that finish as Top30 WRs by the end of the season since 2017. This limitation can't be fixed by simply including the data from more seasons because the strategies in the NFL are always changing and including seasons further in the past may not be representative of how the NFL is today. Going back until the 2017 season is completely arbitrary and was chosen because it is as far back as Sleeper allows for easily collecting data on all WRs, but a different analysis would have to be conducted to determine how many past seasons accurately represent the 2021 season and beyond.
+
+
+
+
+
+
+## Save excel as a CSV and use either read_csv or read.csv
+
+
+

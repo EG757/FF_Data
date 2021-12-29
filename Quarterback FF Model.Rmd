@@ -1,0 +1,249 @@
+---
+title: "Quarterback FF Model"
+author: "Eddy Gekosky"
+date: "12/21/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(tidyverse)
+library(tidymodels)
+library(scales)
+library(modelr)
+```
+
+
+```{r}
+ad <- Fantasy.Data.for.Years
+```
+
+
+```{r}
+ad%>%summarize(mean(Good.QB))
+```
+
+It is clear finding a "Good QB" (a QB that averages over 18.45 points a game) is more difficult than anticipated.
+
+
+
+```{r}
+ad <- ad%>%
+  mutate(prev_good = if_else(Previous.Pts.G > 18.45, 1, 0))%>%
+  mutate(rush_per_g = RushingAtt/G)%>%
+  mutate(mobile=ntile(rush_per_g, n=8))%>%
+  mutate(passes_pg = PassingAtt/G)%>%
+  mutate(pass_TDs_pg = PassingTD/G)%>%
+  mutate(many_passer = ntile(pass_TDs_pg, n=8))%>%
+  mutate(TOs_pg = Turnovers/G)%>%
+  mutate(TO_brackets = ntile(TOs_pg, n=5))%>%
+  mutate(TD_rate = PassingTD/PassingAtt)%>%
+  mutate(TDr_brackets = ntile(TD_rate, n=8))%>%
+mutate(Fpts_per_g = FantasyPoints/G)
+```
+
+
+
+```{r}
+ad%>%
+  filter(Previous.Pts.G=="N/A")%>%
+  summarize(mean(Good.QB))
+
+ad%>%
+  filter(Year==2015)%>%
+  summarize(mean(Good.QB))
+```
+Previous Points per Game can't be used because the data set just doesn't seem to be big enough. This statistic would disclude everyone from 2015. It does show that first time starters tend to perform better as the QB hit rate goes up when only players from 2015 are discluded.
+
+
+
+```{r}
+ad%>%
+  group_by(mobile)%>%
+  summarize(mean(Good.QB))
+  
+
+ad%>%
+  group_by(mobile)%>%
+  summarize(mean(rush_per_g))
+```
+
+Interesting enough, QBs who are in the top quantile in rushing attempts per game have a much higher chance to finish as a Good QB than other QBs, but the results are mixed beyond that, other than QBs in the lowest octile having the worst hit rates by far.
+
+```{r}
+mob_v_pts <- ggplot(ad, aes(x=rush_per_g, y=Fpts_per_g))+
+  geom_point(color="blue", alpha=0.8)+
+  geom_smooth(method = lm, color = 'red', fill='white', alpha=0.5)+
+  labs(x = 'Rush Attmepts per Game')+
+  labs(y = 'Fantasy Points per Game')+
+  labs(title= "Rush Attempts vs. Fantasy Points")
+
+mob_v_pts
+```
+
+
+
+
+
+
+```{r}
+ad%>%
+  group_by(many_passer)%>%
+  summarize(mean(Good.QB))
+  
+
+ad%>%
+  group_by(many_passer)%>%
+  summarize(mean(passes_pg))
+```
+
+Pass attempts per game doesn't matter nearly as much. It appears that having under 32 pass attempts per game is a negative, but there isn't too much of a difference otherwise.
+
+
+
+```{r}
+ad%>%
+  group_by(TO_brackets)%>%
+  summarize(mean(Good.QB))
+  
+
+ad%>%
+  group_by(TO_brackets)%>%
+  summarize(mean(TOs_pg))
+```
+
+Turnovers actually do make a big difference. QBs that turn the ball over less than 1 time per game have a much high chance of being a top QB than other QBs. This makes sense because there's probably a strong correlation between QBs that take care of the football and scoring fantasy points.
+
+
+```{r}
+ad%>%
+  group_by(TDr_brackets)%>%
+  summarize(mean(Good.QB))
+  
+
+ad%>%
+  group_by(TDr_brackets)%>%
+  summarize(mean(TD_rate))
+```
+
+In the past 5 years, there hasn't been a single QB to finish as a good QB without having at least a 4% TD_rate. QBs in the highest octile for TD rate are also 90% likely to finish as a good QB. TD_rate seems to be the most correlative statistic so far when determining which QBs will finish as Good QBs.
+
+
+
+
+## Making the Model
+
+```{r}
+ad<-ad%>%
+  mutate(goodQB_f=as_factor(ifelse(Good.QB==1,1, 0)))
+```
+
+
+## Splitting data into training and testing data
+
+```{r}
+split_data<-initial_split(ad)
+
+ad_train<-training(split_data)
+
+ad_test<-testing(split_data)
+```
+
+
+## Setting up the Logistic Regression Model
+
+```{r}
+logit_mod<-logistic_reg()%>%
+  set_engine("glm")%>%
+  set_mode("classification")
+```
+
+
+## Formula and Recipe
+
+```{r}
+admit_formula<-as.formula("goodQB_f~TD_rate+mobile+passes_pg")
+
+admit_recipe<-recipe(admit_formula,ad_train)
+```
+
+
+## Workflow
+
+```{r}
+ad_wf<-workflow()%>%
+  add_model(logit_mod)%>%
+  add_recipe(admit_recipe)
+```
+
+
+## Train Model
+
+```{r}
+ad_wf<-ad_wf%>%
+  fit(ad_train)
+```
+
+```{r}
+ad_wf%>%tidy()
+```
+
+
+## Accuracy
+
+Remember that accuracy must always be evaluated relative to the baseline rate. Let's check our baseline:
+
+```{r}
+ad_test%>%summarize(mean(Good.QB))
+```
+
+
+```{r}
+ad_wf%>%
+  predict(ad_test)%>%
+  bind_cols(ad_test)%>%
+ accuracy(truth=goodQB_f,estimate=.pred_class,event_level="first")
+```
+
+
+
+## Sensitivity
+
+```{r}
+ad_wf%>%
+  predict(ad_test)%>%
+  bind_cols(ad_test)%>%
+ sens(truth=goodQB_f,estimate=.pred_class,event_level="first")
+```
+____% that it's not a false positive.
+
+
+## Specificity
+
+```{r}
+ad_wf%>%
+  predict(ad_test)%>%
+  bind_cols(ad_test)%>%
+ spec(truth=goodQB_f,estimate=.pred_class,event_level="first")
+```
+
+______% that it's not a false negative.
+
+
+
+
+
+
+While the sample size we used was on the smaller side, it appears that TD_rate, rushes per game, and passes per game are enough to accurately predict which QBs will be good 90-97% of the time. This is more than enough to determine a good QB.
+
+Now we have to find reliable explanatory variables for each of the explanatory variables for "Good QB" rate. Rushing attempts per game is easy to predict as mobile QBs typically sustain their number of rushing attempts per game season over season because running the ball is an intrinsic part of their game. Predicting the other two variables is much more complicated however.
+
+
+
+
+
